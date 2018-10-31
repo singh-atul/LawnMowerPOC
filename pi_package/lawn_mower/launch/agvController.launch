@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<launch>
+
+  <node pkg="lawn_mower" type="controller_aurdino.py" name="controller_cmd_server" output="screen" >
+    <param name="portname" value="/dev/ttyUSB1" />	
+  </node>
+    <!-- Launch robot_localization and navsat
+    <include file="$(find dummy)/launch/include/localization_run.launch"/> 
+    -->
+<!--<node pkg="lawn_mower" type="publish_sonar_data.py" name="sonarDataPublishNode" output="screen" >
+<param name="portname" value="/dev/ttyACM0" />
+</node>-->
+</launch>
