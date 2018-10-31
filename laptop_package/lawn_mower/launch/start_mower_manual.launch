@@ -1,0 +1,17 @@
+<launch>
+
+	<!-- Launch RTK-GPS node -->
+    	<node pkg="emlid_rtk" type="reachrs_nmea_navsat" name="reachrs_nmea_navsat">
+    	</node>
+
+	<!-- Launch RTK-Compass node -->
+
+	<node pkg="emlid_rtk" type="reachrs_imu" name="reachrs_imu">
+	</node>
+
+	
+	
+
+
+
+</launch>

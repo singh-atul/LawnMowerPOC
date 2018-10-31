@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+import rospy
+from std_msgs.msg import String
+from std_msgs.msg import Float64
+from emlid_rtk.msg import rtk_xyz_ecef
+import serial
+import socket
+import rospy
+import os
+import sys
+
+#import libnmea_navsat_driver.driver
+
+class ReachSocketHandlerXYZ:
+    # Set our parameters and the default socket to open
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+
+    # Should open the connection and connect to the device
+    # This will then also start publishing the information
+    def start(self):
+        # Try to connect to the device
+        rospy.loginfo('Connecting to Reach RTK %s on port %s' % (str(self.host),str(self.port)))
+        self.connect_to_device()
+        try:
+            # Create the driver
+            while not rospy.is_shutdown():
+                data = self.buffered_readLine().strip()
+                # Debug print message line
+                #print(data)
+                #Publish to a topic
+                try:
+                    xyz_ecef_full.publish(data)
+                    current_coord = rtk_xyz_ecef()
+
+
+                    xyz_line = data.split()
+                    date = xyz_line[0].strip()
+                    time = xyz_line[1].strip()
+                    current_coord.x_ecef = float(xyz_line[2].strip())
+                    current_coord.y_ecef = float(xyz_line[3].strip())
+                    current_coord.z_ecef = float(xyz_line[4].strip())
+                    current_coord.sol_status = int(xyz_line[5].strip())
+                    current_coord.timestamp = xyz_line[0].strip() + " " + xyz_line[1].strip()
+                    xyz_ecef.publish(current_coord)
+                except Exception as e:
+                    rospy.loginfo("Invalid data from socket. Trying next! %s" % e)
+                    continue
+
+        except rospy.ROSInterruptException:
+            # Close GPS socket when done
+            self.soc.close()
+
+    # Try to connect to the device, allows for reconnection
+    # Will loop till we get a connection, note we have a long timeout
+    def connect_to_device(self):
+        while not rospy.is_shutdown():
+            try:
+                self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.soc.settimeout(5.0)
+                self.soc.connect((self.host,self.port))
+                rospy.loginfo('Successfully connected to device, starting publishing!')
+                return
+            except socket.timeout:
+                rospy.logwarn_throttle(30,'Socket connection timeout. Retrying...')
+                continue
+            except Exception as e:
+                rospy.logerr("Socket connection error. Error was: %s." % e)
+                exit()
+
+    # Try to connect to the device, assuming it just was disconnected
+    # Will loop till we get a connection
+    def reconnect_to_device(self):
+        rospy.logwarn('Device disconnected. Reconnecting...')
+        self.soc.close()
+        self.connect_to_device()
+
+    def buffered_readLine(self):
+        line = ""
+        while not rospy.is_shutdown():
+            # Try to get data from it
+            try:
+                part = self.soc.recv(1)
+            except socket.timeout:
+                rospy.logwarn('Timeout...')
+                self.reconnect_to_device()
+                continue
+            # See if we need to process the data
+            if not part or len(part) == 0:
+                rospy.logwarn('No incoming XYZ data...')
+                self.reconnect_to_device()
+                continue
+            if part != "\n":
+                line += part
+            elif part == "\n":
+                break
+        return line
+
+if __name__ == '__main__':
+
+    # Initialize our ros node
+    xyz_ecef_full = rospy.Publisher('xyz_ecef_full', String, queue_size=10)
+    xyz_ecef = rospy.Publisher('xyz_ecef', rtk_xyz_ecef, queue_size=10)
+    rospy.init_node('reachrs_xyz_ecef')
+
+
+
+    # Read in ROS parameters
+    #    print "~host", ~host
+    #host = rospy.get_param('~host', '192.168.2.15')
+    #port = rospy.get_param('~port', 9001)
+    host = "192.168.2.15"
+    port = 9002
+    # Open the socket to our device, and start streaming the data
+    try:    
+        device = ReachSocketHandlerXYZ(host,port)
+        device.start()
+    except rospy.ROSInterruptException:
+        pass
+

@@ -1,0 +1,11 @@
+<launch>
+
+	<!-- Start Mower 
+    	<node pkg="lawn_mower" type="pathFollower.py" name="pathFollower" output="screen">
+    	</node> -->
+
+		<node pkg="lawn_mower" type="object_avoidance_move.py" name="startMower" output="screen">
+    	</node>
+
+
+</launch>

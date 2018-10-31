@@ -1,0 +1,151 @@
+
+import numpy as np
+from scipy.interpolate import splprep, splev
+from shapely.geometry import Polygon, Point
+import pandas as pd
+
+class gloabl_path_coverage:
+    def __init__(self):
+        sep = 1
+        self.file_name = 'obs'
+        self.longitude_upper_limit = 1*sep
+        self.latitude_upper_limit = 1*sep
+        self.limit = 1*sep
+        
+        self.points_to_follow = []
+        self.direction = 'S'
+        self.count = 0
+        
+        self.coordinates = self.load_data()
+        self.list_of_boundaries = self.list_boundaries(self.coordinates)
+        self.list_all_polygons = self.list_all_polygons()
+        
+        self.minx, self.miny, self.maxx, self.maxy = self.list_all_polygons[0].bounds
+        self.longs = np.arange(self.minx, self.maxx+self.longitude_upper_limit, self.limit)
+        self.lats =  np.arange(self.miny, self.maxy+self.latitude_upper_limit, self.limit)
+        
+        self.edges = self.calculate_boundary_points(self.list_of_boundaries,self.list_all_polygons,self.longs,self.lats)
+    
+        self.current_position = self.edges[0][:]
+        self.current_position.extend('S')
+        self.traversed_list = []
+        self.final_list_waypoint = []
+        self.move=[[0.,-self.limit , 'S'],[-self.limit,0. , 'W'],[0.,self.limit ,'N'],[self.limit,0 ,'E']]
+        self.calculate_waypoints()
+        self.save_points()
+
+    def load_data(self):
+        # DUMMY DATA
+        df = pd.read_csv(self.file_name, sep=" ", header=None)
+        #lsit of points in format [Latitude,Longitude] 
+        coordinates  = df.apply(pd.to_numeric, args=('coerce',)).values
+        
+        return coordinates
+    
+    def list_boundaries(self,coordinates):
+        #contains points for farm boundary and each obstacle recorded 
+        list_of_boundaries = []
+        
+        #temp for calculation purpose
+        boundary = []
+
+        # loop to separate points based on boundary from file read (coordinates) and store it into list of boundaries
+        for i in coordinates:
+            #if 'X' in i :
+            if np.isnan(i).any():
+                list_of_boundaries.append(boundary)
+                boundary = []
+                continue
+            boundary.append(i)
+            
+        
+
+        return list_of_boundaries
+    
+    def list_all_polygons(self):
+    
+        # will convert points under list_of_boundaries into indiv polygon and store into list_all_polygons.
+
+        ## its one time process
+    
+        list_all_polygons =[]
+
+        for boundary in self.list_of_boundaries:
+            points =np.array(boundary)
+            list_all_polygons.append(Polygon(points))
+            
+        return list_all_polygons
+    
+    
+    def calculate_boundary_points(self,list_of_boundaries,list_all_polygons,longs,lats):
+        edges=[]
+        for x in range(0,len(longs)):
+            for y in range(0,len(lats)):
+                point = Point([longs[x],lats[y]])
+                if list_all_polygons[0].contains(point) or np.any(np.equal([longs[x],lats[y]] , list_of_boundaries[0]).all(axis=1)):
+                    if( len(list_all_polygons) > 1):
+                        flag_poly = True
+                        for obstacle_poly in list_all_polygons[1:]:
+                            if obstacle_poly.contains(point):
+                                flag_poly = False
+                        if flag_poly:
+                            edges.append([longs[x],lats[y]])
+
+                    else:
+                        edges.append([longs[x],lats[y]])
+        return edges
+    
+    def list_point_to_follow(self,point):
+
+        if len(self.points_to_follow)<1:
+            self.points_to_follow.append(point)
+
+        if point[2] == self.direction:
+            if self.count > 10:
+                self.count = 0
+                self.points_to_follow.append(point)
+            else:
+                self.count = self.count+1
+        else:
+            self.points_to_follow.append(point)
+            self.direction = point[2]
+            self.count = 0
+            
+    def move_next(self,current_position):
+        for i in self.move:
+            next_x = current_position[0] + i[0]
+            next_y = current_position[1] + i[1]
+            theta = i[2]
+            point = Point(next_x , next_y)
+            if [next_x , next_y] not in self.traversed_list:
+                if self.list_all_polygons[0].contains(point) or np.any(np.equal([next_x , next_y] , self.coordinates).all(axis=1)):
+                    if( len(self.list_all_polygons) > 1):
+                        flag_poly = True
+                        for obstacle_poly in self.list_all_polygons[1:]:
+                            if obstacle_poly.contains(point):
+                                flag_poly = False
+                        if flag_poly:
+                            return [next_x,next_y ,theta]
+                    else:
+                        return [next_x,next_y ,theta]
+        return None
+    
+    def calculate_waypoints(self):
+        while len(self.edges)!=0 :
+    
+            if self.current_position == None:
+                self.current_position = self.edges[0][:]
+                self.current_position.extend('S')
+                
+            point =  self.current_position[:2]
+            self.edges.remove(point)
+            self.traversed_list.append(self.current_position[:2])
+            self.list_point_to_follow(self.current_position)
+            self.final_list_waypoint.append(self.current_position)
+            self.current_position = self.move_next(self.current_position)
+            
+    def save_points(self):
+        with open('points_to_follow','w') as f:
+            for data in self.points_to_follow:
+                f.write(str(data[0])+';'+str(data[1]))
+                f.write('\n')

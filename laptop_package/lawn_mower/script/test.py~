@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+import rospy
+#!/usr/bin/env python
+
+import numpy as np
+from scipy.interpolate import splprep, splev
+from shapely.geometry import Polygon, Point
+import pandas as pd
+
+from dummy.msg import Num
+
+def talker():
+    pub = rospy.Publisher('custom_chatter', Num)
+    rospy.init_node('custom_talker', anonymous=True)
+    r = rospy.Rate(20) #10hz
+    with open('points_to_follow') as f:
+	data = f.readlines()
+    for i in data:
+	if len(i) < 2:
+	    continue
+	val=i.split(';')
+	msg = Num()
+
+        msg.latitude = float(val[0])
+        msg.longitude = float(val[1])
+
+	if not rospy.is_shutdown():
+            rospy.loginfo(msg)
+            pub.publish(msg)
+            r.sleep()
+	    
+    
+
+if __name__ == '__main__':
+    try:
+        talker()
+    except rospy.ROSInterruptException: pass
+

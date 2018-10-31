@@ -1,0 +1,45 @@
+<!-- Test launch file for two EKF instances and one navsat_transform instance -->
+
+<launch>
+
+  <rosparam command="load" file="$(find emlid_rtk)/config/control.yaml" />
+
+  <node pkg="emlid_rtk" type="reachrs_imu" name="reachrs_imu"/>
+  <node pkg="emlid_rtk" type="reachrs_nmea_navsat" name="reachrs_nmea_navsat"/>
+
+  <node name="base_controller_spawner" pkg="controller_manager" type="spawner" args="husky_joint_publisher husky_velocity_controller --shutdown-timeout 3"/>
+  
+  <!-- Play ROS Bag file -->
+   
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="bl_imu" args="0 0 0 0 0 0 base_link imu_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="bl_gps" args="0 0 0.0 0 0 0 base_link gps" /> 
+
+  <rosparam command="load" file="$(find emlid_rtk)/config/dual_ekf_navsat_example.yaml" />
+
+  <node pkg="robot_localization" type="ekf_localization_node" name="ekf_se_odom" clear_params="true">
+    <remap from="/odometry/filtered" to="/odometry/filtered/local"/>
+  </node>
+
+  <node pkg="robot_localization" type="ekf_localization_node" name="ekf_se_map" clear_params="true">
+    <remap from="/odometry/filtered" to="/odometry/filtered/global"/>
+  </node>
+
+
+   <!-- navsat_transform -->
+
+  <node pkg="robot_localization" type="navsat_transform_node" name="navsat_transform" clear_params="true" output="screen">
+      <remap from="/odometry/filtered" to="/odometry/filtered/global"/>
+      <remap from="/gps/fix" to="/fix"/>
+      <remap from="/imu/data" to="/sensor_imu"/>
+  </node>
+<!--  <node pkg="interactive_marker_twist_server" type="marker_server" name="twist_marker_server" output="screen"/>
+
+  <node pkg="twist_mux" type="twist_mux" name="twist_mux">
+    <rosparam command="load" file="$(find husky_control)/config/twist_mux.yaml" />
+    <remap from="cmd_vel_out" to="husky_velocity_controller/cmd_vel"/>
+  </node> -->
+
+
+
+ </launch>

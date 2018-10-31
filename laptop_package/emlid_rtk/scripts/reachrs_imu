@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+
+import rospy
+from std_msgs.msg import String
+from std_msgs.msg import Float64
+from sensor_msgs.msg import Imu
+import serial
+import socket
+import rospy
+import os
+import sys
+
+class ReachSocketHandlerCompass:
+    # Set our parameters and the default socket to open
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+
+    # Should open the connection and connect to the device
+    # This will then also start publishing the information
+    def start(self):
+        imu_seq = 0
+        # Try to connect to the device
+        rospy.loginfo('Connecting to Reach RTK %s on port %s' % (str(self.host),str(self.port)))
+        self.connect_to_device()
+        try:
+            # Create the driver
+            while not rospy.is_shutdown():
+                data = self.buffered_readLine().strip()
+                # Debug print message line
+                #print(data)
+                #Publish to a topic
+                try:
+                    compass_heading_full.publish(data)
+                    imu_array = Imu()
+                    #angle = float(data.split(',')[1].strip())
+                    imu_array_temp = data.split(',')
+                    angle = float(imu_array_temp[1].strip())
+                    imu_array.orientation.x = float(imu_array_temp[6].strip())
+                    imu_array.orientation.y = float(imu_array_temp[7].strip())
+                    imu_array.orientation.z = float(imu_array_temp[8].strip())
+                    imu_array.orientation.w = float(imu_array_temp[9].strip())
+
+                    imu_array.angular_velocity.x = float(imu_array_temp[10].strip())
+                    imu_array.angular_velocity.y = float(imu_array_temp[11].strip())
+                    imu_array.angular_velocity.z = float(imu_array_temp[12].strip())
+
+                    imu_array.linear_acceleration.x = float(imu_array_temp[13].strip())
+                    imu_array.linear_acceleration.y = float(imu_array_temp[14].strip())
+                    imu_array.linear_acceleration.z = float(imu_array_temp[15].strip())
+
+                    imu_array.header.stamp = rospy.get_rostime()
+                    imu_array.header.frame_id = "imu_link";
+                    imu_array.header.seq = imu_seq
+                    imu_seq = imu_seq + 1
+
+                    #Setting the covariance
+                    imu_array.orientation_covariance = (0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    imu_array.angular_velocity_covariance = (0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    imu_array.linear_acceleration_covariance = (0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    #imu_array.orientation_covariance = (0.0025, 0, 0, 0, 0.0025, 0, 0, 0, 0.0025);
+                    #imu_array.angular_velocity_covariance = (0.02, 0, 0, 0, 0.02, 0, 0, 0, 0.02);
+                    #imu_array.linear_acceleration_covariance = (0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04);
+                    # imu_array.orientation_covariance = (0.0025, 0, 0, 0, 0.0025, 0, 0, 0, 0.0025);
+                    # imu_array.angular_velocity_covariance = (0.0025, 0, 0, 0, 0.0025, 0, 0, 0, 0.0025);
+                    # imu_array.linear_acceleration_covariance = (0.0025, 0, 0, 0, 0.0025, 0, 0, 0, 0.0025);
+
+                    compass_angle.publish(angle)
+                    sensor_imu.publish(imu_array)
+                except Exception as e:
+                    rospy.loginfo('Invalid data from socket. Trying next!%s' %e)
+                    continue
+
+        except rospy.ROSInterruptException:
+            # Close GPS socket when done
+            self.soc.close()
+
+    # Try to connect to the device, allows for reconnection
+    # Will loop till we get a connection, note we have a long timeout
+    def connect_to_device(self):
+        while not rospy.is_shutdown():
+            try:
+                self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.soc.settimeout(5.0)
+                self.soc.connect((self.host,self.port))
+                rospy.loginfo('Successfully connected to device, starting publishing!')
+                return
+            except socket.timeout:
+                rospy.logwarn_throttle(30,'Socket connection timeout. Retrying...')
+                continue
+            except Exception as e:
+                rospy.logerr("Socket connection error. Error was: %s." % e)
+                exit()
+
+    # Try to connect to the device, assuming it just was disconnected
+    # Will loop till we get a connection
+    def reconnect_to_device(self):
+        rospy.logwarn('Device disconnected. Reconnecting...')
+        self.soc.close()
+        self.connect_to_device()
+
+    def buffered_readLine(self):
+        line = ""
+        while not rospy.is_shutdown():
+            # Try to get data from it
+            try:
+                part = self.soc.recv(1)
+            except socket.timeout:
+                self.reconnect_to_device()
+                continue
+            # See if we need to process the data
+            if not part or len(part) == 0:
+                self.reconnect_to_device()
+                continue
+            if part != "\n":
+                line += part
+            elif part == "\n":
+                break
+        return line
+
+if __name__ == '__main__':
+
+    # Initialize our ros node
+    compass_heading_full = rospy.Publisher('compass_heading_full', String, queue_size=10)
+    compass_angle = rospy.Publisher('compass_angle', Float64, queue_size=10)
+    sensor_imu = rospy.Publisher('sensor_imu', Imu, queue_size=10)
+    rospy.init_node('reachrs_imu')
+
+
+
+    # Read in ROS parameters
+    #    print "~host", ~host
+    #host = rospy.get_param('~host', '192.168.2.15')
+    #port = rospy.get_param('~port', 9001)
+    host = "192.168.42.1"
+    port = 9003
+    # Open the socket to our device, and start streaming the data
+    try:    
+        device = ReachSocketHandlerCompass(host,port)
+        device.start()
+    except rospy.ROSInterruptException:
+        pass
+

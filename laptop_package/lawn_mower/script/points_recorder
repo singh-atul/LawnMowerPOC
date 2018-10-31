@@ -1,0 +1,100 @@
+#!/usr/bin/env python
+
+import rospy, rospkg
+
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import NavSatFix, NavSatStatus, TimeReference
+
+import sys, select, termios, tty
+import os
+
+rospack = rospkg.RosPack()
+msg = """
+Control Your bot!
+
+s : start Recording points
+p : pause recording
+z : put seperator
+t : terminate recording 
+
+"""
+
+is_write =  False #write status
+file_path = "saved_points_sim.txt"
+is_add_hash = False
+is_stop_hash = False
+stop_node=False
+
+
+def store_coordinates(px, py):
+    global is_write
+    #construct the absolute file path
+    abs_path = rospack.get_path("lawn_mower") + "/script/ServerRequestHandler/" + file_path
+    #[12.358199999999998, 76.596150000000023]
+    with open(abs_path, 'a') as f:
+        f.write('['+str(px).strip() + ',' + str(py).strip()+  ']\n')
+
+def append_hash_file():
+    global is_add_hash
+    global is_stop_hash
+    global stop_node
+
+    #construct the absolute file path
+
+    abs_path = rospack.get_path("lawn_mower") + "/script/ServerRequestHandler/" + file_path
+    
+    with open(abs_path, 'a') as f:
+        
+        f.write('#' + '\n')
+
+def gps_CB(data):
+    # only write if 
+    global is_write
+    if(is_write):
+	    store_coordinates(data.latitude, data.longitude)
+	    is_write = False
+	    print 'point recored: Latitude ',data.latitude,' Longitude: ', data.longitude
+	    #store_coordinates(data.pose.pose.position.x,data.pose.pose.position.y)	    
+	    
+
+
+def getKey():
+    tty.setraw(sys.stdin.fileno())
+    rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+    if rlist:
+        key = sys.stdin.read(1)
+    else:
+        key = ''
+
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+    return key
+
+settings = termios.tcgetattr(sys.stdin)
+     
+rospy.init_node('record_points')
+odom_sub = rospy.Subscriber('/fix', NavSatFix, gps_CB)
+#odom_sub = rospy.Subscriber('/vo', Odometry, gps_CB)
+
+try:
+    print msg
+    while 1 and not stop_node:
+	key = getKey()
+	if key == 's':
+	    print 'Recording of Points started'
+	    is_write = True
+	elif key == 'p':
+	    print 'Recording of Points paused'
+	    is_write = False
+	elif key == 'z':
+	    append_hash_file()
+	    print 'Seperator added points recording stopped'
+	    is_write = False
+	elif key == 't':
+	    print 'Recording of Points stopped'
+	    stop_node = True
+	    #append_hash_file()
+except Exception as err:
+    print err
+finally:
+	"Done..."

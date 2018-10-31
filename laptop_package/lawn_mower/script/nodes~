@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+
+
+from dummy.msg import Num
+import rospy
+import pipeline 
+
+	
+
+def waypoint_publisher():
+    pub = rospy.Publisher('waypoints', Num, queue_size=10)
+    rospy.init_node('waypoint_publisher', anonymous=True)
+    r = rospy.Rate(20) #10hz
+    pipeline.gloabl_path_coverage()
+    with open('points_to_follow') as f:
+	data = f.readlines()
+    for i in data:
+	if len(i) < 2:
+	    continue
+	val=i.split(';')
+	msg = Num()
+
+        msg.latitude = float(val[0])
+        msg.longitude = float(val[1])
+
+
+        if not rospy.is_shutdown():
+            rospy.loginfo(msg)
+            pub.publish(msg)
+            r.sleep()
+
+if __name__ == '__main__':
+    try:
+        waypoint_publisher()
+    except rospy.ROSInterruptException:
+        pass
